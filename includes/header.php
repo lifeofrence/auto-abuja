@@ -58,7 +58,7 @@
         </div>
 
         <!-- Wishlist and Cart Buttons -->
-        <div class="d-flex align-items-center me-3">
+        <!-- <div class="d-flex align-items-center me-3">
             <button class="btn btn-outline-danger me-2" id="wishlistBtn" style="border-radius: 25px;">
                 <i class="fa fa-heart"></i> <span class="d-none d-lg-inline">Wishlist</span> (<span
                     id="wishlistCount">0</span>)
@@ -67,7 +67,7 @@
                 <i class="fa fa-shopping-cart"></i> <span class="d-none d-lg-inline">Cart</span> (<span
                     id="cartCount">0</span>)
             </button>
-        </div>
+        </div> -->
 
         <a href="auth.php" class="btn btn-primary py-4 px-lg-5 d-none d-lg-block">
             <i class="fa fa-user me-2"></i> Login
