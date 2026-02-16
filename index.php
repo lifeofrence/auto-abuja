@@ -151,10 +151,10 @@
                             <h4 class="mb-3" style="color: #F68B1E;">₦15,000,000</h4>
                             <p class="text-muted mb-2"><i class="fa fa-check-circle text-success"></i> Available: 6</p>
                             <p class="text-secondary mb-3 small">Quote Product #: VEH-001</p>
-                            <button class="btn w-100 mb-2 add-to-cart" data-product="Benz GLE 2016"
+                            <!-- <button class="btn w-100 mb-2 add-to-cart" data-product="Benz GLE 2016"
                                 data-price="15000000" style="background: #F68B1E; border: none; color: #000;">
                                 <i class="fa fa-shopping-cart"></i> Add to Cart
-                            </button>
+                            </button> -->
                             <a href="#" class="btn btn-outline-dark w-100 btn-sm">View Details</a>
                         </div>
                     </div>
@@ -178,10 +178,10 @@
                             <h4 class="mb-3" style="color: #F68B1E;">₦2,500,000</h4>
                             <p class="text-muted mb-2"><i class="fa fa-check-circle text-success"></i> Available: 6</p>
                             <p class="text-secondary mb-3 small">Quote Product #: VEH-002</p>
-                            <button class="btn w-100 mb-2 add-to-cart" data-product="Camry 08" data-price="2500000"
+                            <!-- <button class="btn w-100 mb-2 add-to-cart" data-product="Camry 08" data-price="2500000"
                                 style="background: #F68B1E; border: none; color: #000;">
                                 <i class="fa fa-shopping-cart"></i> Add to Cart
-                            </button>
+                            </button> -->
                             <a href="#" class="btn btn-outline-dark w-100 btn-sm">View Details</a>
                         </div>
                     </div>
@@ -205,10 +205,10 @@
                             <h4 class="mb-3" style="color: #F68B1E;">₦8,000,000</h4>
                             <p class="text-muted mb-2"><i class="fa fa-check-circle text-success"></i> Available: 6</p>
                             <p class="text-secondary mb-3 small">Quote Product #: VEH-003</p>
-                            <button class="btn w-100 mb-2 add-to-cart" data-product="EV Car" data-price="8000000"
+                            <!-- <button class="btn w-100 mb-2 add-to-cart" data-product="EV Car" data-price="8000000"
                                 style="background: #F68B1E; border: none; color: #000;">
                                 <i class="fa fa-shopping-cart"></i> Add to Cart
-                            </button>
+                            </button> -->
                             <a href="#" class="btn btn-outline-dark w-100 btn-sm">View Details</a>
                         </div>
                     </div>
@@ -233,10 +233,10 @@
                             <p class="text-muted mb-2"><i class="fa fa-check-circle text-success"></i> Available:
                                 Unlimited</p>
                             <p class="text-secondary mb-3 small">Quote Product #: SRV-001</p>
-                            <button class="btn w-100 mb-2 add-to-cart" data-product="Car Servicing" data-price="50000"
+                            <!-- <button class="btn w-100 mb-2 add-to-cart" data-product="Car Servicing" data-price="50000"
                                 style="background: #F68B1E; border: none; color: #000;">
                                 <i class="fa fa-shopping-cart"></i> Add to Cart
-                            </button>
+                            </button> -->
                             <a href="#" class="btn btn-outline-dark w-100 btn-sm">View Details</a>
                         </div>
                     </div>

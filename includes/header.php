@@ -51,9 +51,9 @@
             <a href="index.php" class="nav-item nav-link">Home</a>
             <a href="about.php" class="nav-item nav-link">About Us</a>
             <!-- <a href="business.php" class="nav-item nav-link">Businesses</a> -->
-            <a href="product.php" class="nav-item nav-link">Products</a>
+            <!-- <a href="product.php" class="nav-item nav-link">Products</a> -->
             <!-- <a href="service.php" class="nav-item nav-link">Services</a> -->
-            <!-- <a href="team.php" class="nav-item nav-link">Owner</a> -->
+            <a href="team.php" class="nav-item nav-link">Owner</a>
             <!-- <a href="faq.php" class="nav-item nav-link">FAQ</a> -->
         </div>
 
