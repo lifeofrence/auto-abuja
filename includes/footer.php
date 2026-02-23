@@ -51,7 +51,7 @@
             <div class="row">
                 <div class="col-md-6 text-center text-md-start mb-3 mb-md-0">
                     &copy; <a class="border-bottom" href="#"> Quion Nigeria Limited</a>, All Right Reserved.
-                    Designed By <a class="border-bottom" href="https://jubileesys.com">Jubilee Systems Ltd</a>
+                    </a>
                 </div>
                 <div class="col-md-6 text-center text-md-end">
                     <div class="footer-menu">

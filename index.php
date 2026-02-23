@@ -574,7 +574,8 @@ $all_categories_result = $conn->query($all_categories_query);
                                         alt="<?php echo htmlspecialchars($business['business_name'] ?? ''); ?>"
                                         style="height: 180px; width: 100%; object-fit: cover;">
                                     <h5 class="fw-bold text-dark px-2">
-                                        <?php echo htmlspecialchars($business['business_name'] ?? ''); ?></h5>
+                                        <?php echo htmlspecialchars($business['business_name'] ?? ''); ?>
+                                    </h5>
                                     <?php if ($business['verified']): ?>
                                         <div class="mt-2">
                                             <span class="badge bg-success small"><i
@@ -618,7 +619,8 @@ $all_categories_result = $conn->query($all_categories_query);
                                         alt="<?php echo htmlspecialchars($business['business_name'] ?? ''); ?>"
                                         style="height: 180px; width: 100%; object-fit: cover;">
                                     <h5 class="fw-bold text-dark px-2">
-                                        <?php echo htmlspecialchars($business['business_name'] ?? ''); ?></h5>
+                                        <?php echo htmlspecialchars($business['business_name'] ?? ''); ?>
+                                    </h5>
                                     <?php if ($business['verified']): ?>
                                         <div class="mt-2">
                                             <span class="badge bg-success small"><i
@@ -888,6 +890,32 @@ $all_categories_result = $conn->query($all_categories_query);
 
 
 
+    <!-- Advert Section Start -->
+    <div class="container-fluid py-4" style="background-color: #f8f9fa;">
+        <div class="container">
+            <div class="row g-4">
+                <?php if ($promo_ads_result && $promo_ads_result->num_rows > 0): ?>
+                    <?php
+                    $delay = 0.1;
+                    while ($ad = $promo_ads_result->fetch_assoc()):
+                        ?>
+                        <div class="col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="<?php echo $delay; ?>s">
+                            <div class="ad-slot bg-white">
+                                <a href="<?php echo htmlspecialchars($ad['link_url'] ?? '#'); ?>">
+                                    <img class="img-fluid w-100" src="<?php echo htmlspecialchars($ad['image']); ?>"
+                                        alt="<?php echo htmlspecialchars($ad['title']); ?>">
+                                </a>
+                            </div>
+                        </div>
+                        <?php
+                        $delay += 0.2;
+                    endwhile;
+                    ?>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    <!-- Advert Section End -->
 
 
     <!-- Partners Start -->
@@ -958,32 +986,6 @@ $all_categories_result = $conn->query($all_categories_query);
     <!-- Testimonials End -->
 
 
-    <!-- Advert Section Start -->
-    <div class="container-fluid py-4" style="background-color: #f8f9fa;">
-        <div class="container">
-            <div class="row g-4">
-                <?php if ($promo_ads_result && $promo_ads_result->num_rows > 0): ?>
-                    <?php
-                    $delay = 0.1;
-                    while ($ad = $promo_ads_result->fetch_assoc()):
-                        ?>
-                        <div class="col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="<?php echo $delay; ?>s">
-                            <div class="ad-slot bg-white">
-                                <a href="<?php echo htmlspecialchars($ad['link_url'] ?? '#'); ?>">
-                                    <img class="img-fluid w-100" src="<?php echo htmlspecialchars($ad['image']); ?>"
-                                        alt="<?php echo htmlspecialchars($ad['title']); ?>">
-                                </a>
-                            </div>
-                        </div>
-                        <?php
-                        $delay += 0.2;
-                    endwhile;
-                    ?>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-    <!-- Advert Section End -->
 
 
     <?php include 'includes/footer.php'; ?>
