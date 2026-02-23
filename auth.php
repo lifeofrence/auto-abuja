@@ -1,3 +1,87 @@
+<?php
+require_once 'includes/config.php';
+
+// Redirect if already logged in
+if (is_logged_in()) {
+    header("Location: dashboard.php");
+    exit;
+}
+
+$error = "";
+$success = "";
+
+// Handle Login
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
+    $email = sanitize_input($_POST['email']);
+    $password = $_POST['password'];
+
+    $query = "SELECT * FROM users WHERE email = ? LIMIT 1";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows === 1) {
+        $user = $result->fetch_assoc();
+        if (password_verify($password, $user['password'])) {
+            if ($user['status'] === 'active') {
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['name'] = $user['name'];
+                $_SESSION['role'] = $user['role'];
+                $_SESSION['email'] = $user['email'];
+
+                // Update last login
+                $conn->query("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = " . $user['id']);
+
+                header("Location: dashboard.php");
+                exit;
+            } else {
+                $error = "Your account is " . $user['status'] . ". Please contact admin.";
+            }
+        } else {
+            $error = "Invalid email or password.";
+        }
+    } else {
+        $error = "Invalid email or password.";
+    }
+}
+
+// Handle Registration
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
+    $name = sanitize_input($_POST['first_name'] . ' ' . $_POST['last_name']);
+    $email = sanitize_input($_POST['email']);
+    $phone = sanitize_input($_POST['phone']);
+    $password = $_POST['password'];
+    $confirm_password = $_POST['confirm_password'];
+    $user_type = sanitize_input($_POST['user_type']);
+
+    if ($password !== $confirm_password) {
+        $error = "Passwords do not match!";
+    } else {
+        // Check if email already exists
+        $check_query = "SELECT id FROM users WHERE email = ? LIMIT 1";
+        $check_stmt = $conn->prepare($check_query);
+        $check_stmt->bind_param("s", $email);
+        $check_stmt->execute();
+        if ($check_stmt->get_result()->num_rows > 0) {
+            $error = "Email already registered!";
+        } else {
+            $password_hash = password_hash($password, PASSWORD_DEFAULT);
+            $status = 'active'; // Defaulting to active for now
+
+            $insert_query = "INSERT INTO users (name, email, phone, password, status) VALUES (?, ?, ?, ?, ?)";
+            $insert_stmt = $conn->prepare($insert_query);
+            $insert_stmt->bind_param("sssss", $name, $email, $phone, $password_hash, $status);
+
+            if ($insert_stmt->execute()) {
+                $success = "Registration successful! You can now login.";
+            } else {
+                $error = "Registration failed. Please try again.";
+            }
+        }
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -380,6 +464,20 @@
 
             <!-- Content -->
             <div class="auth-content">
+                <?php if ($error): ?>
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="fa fa-exclamation-circle me-2"></i><?php echo $error; ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($success): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="fa fa-check-circle me-2"></i><?php echo $success; ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                <?php endif; ?>
+
                 <!-- Tabs -->
                 <div class="auth-tabs">
                     <button class="auth-tab active" onclick="switchTab('login')">
@@ -394,16 +492,17 @@
                 <div id="loginForm" class="auth-form active">
                     <h3 class="mb-4">Sign In to Your Account</h3>
 
-                    <form>
+                    <form action="auth.php" method="POST">
+                        <input type="hidden" name="login" value="1">
                         <div class="form-floating">
-                            <input type="email" class="form-control" id="loginEmail" placeholder="Email Address"
-                                required>
+                            <input type="email" name="email" class="form-control" id="loginEmail"
+                                placeholder="Email Address" required>
                             <label for="loginEmail">Email Address</label>
                         </div>
 
                         <div class="form-floating">
-                            <input type="password" class="form-control" id="loginPassword" placeholder="Password"
-                                required>
+                            <input type="password" name="password" class="form-control" id="loginPassword"
+                                placeholder="Password" required>
                             <label for="loginPassword">Password</label>
                         </div>
 
@@ -441,49 +540,51 @@
                 <div id="registerForm" class="auth-form">
                     <h3 class="mb-4">Create Your Account</h3>
 
-                    <form>
+                    <form action="auth.php" method="POST">
+                        <input type="hidden" name="register" value="1">
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <div class="form-floating">
-                                    <input type="text" class="form-control" id="firstName" placeholder="First Name"
-                                        required>
+                                    <input type="text" name="first_name" class="form-control" id="firstName"
+                                        placeholder="First Name" required>
                                     <label for="firstName">First Name</label>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="form-floating">
-                                    <input type="text" class="form-control" id="lastName" placeholder="Last Name"
-                                        required>
+                                    <input type="text" name="last_name" class="form-control" id="lastName"
+                                        placeholder="Last Name" required>
                                     <label for="lastName">Last Name</label>
                                 </div>
                             </div>
                         </div>
 
                         <div class="form-floating">
-                            <input type="email" class="form-control" id="registerEmail" placeholder="Email Address"
-                                required>
+                            <input type="email" name="email" class="form-control" id="registerEmail"
+                                placeholder="Email Address" required>
                             <label for="registerEmail">Email Address</label>
                         </div>
 
                         <div class="form-floating">
-                            <input type="tel" class="form-control" id="phone" placeholder="Phone Number" required>
+                            <input type="tel" name="phone" class="form-control" id="phone" placeholder="Phone Number"
+                                required>
                             <label for="phone">Phone Number</label>
                         </div>
 
                         <div class="form-floating">
-                            <input type="password" class="form-control" id="registerPassword" placeholder="Password"
-                                required>
+                            <input type="password" name="password" class="form-control" id="registerPassword"
+                                placeholder="Password" required>
                             <label for="registerPassword">Password</label>
                         </div>
 
                         <div class="form-floating">
-                            <input type="password" class="form-control" id="confirmPassword"
+                            <input type="password" name="confirm_password" class="form-control" id="confirmPassword"
                                 placeholder="Confirm Password" required>
                             <label for="confirmPassword">Confirm Password</label>
                         </div>
 
                         <div class="form-floating">
-                            <select class="form-select" id="userType" required>
+                            <select name="user_type" class="form-select" id="userType" required>
                                 <option value="">Select User Type</option>
                                 <option value="customer">Customer (Vehicle Owner)</option>
                                 <option value="business">Business Owner (Mechanic/Dealer)</option>
@@ -554,38 +655,6 @@
         function showForgotPassword() {
             alert('Password reset functionality will be implemented. Please contact support at info@quionltd.com');
         }
-
-        // Form validation
-        document.querySelectorAll('form').forEach(form => {
-            form.addEventListener('submit', function (e) {
-                e.preventDefault();
-
-                if (this.closest('#registerForm')) {
-                    const password = document.getElementById('registerPassword').value;
-                    const confirmPassword = document.getElementById('confirmPassword').value;
-
-                    if (password !== confirmPassword) {
-                        alert('Passwords do not match!');
-                        return;
-                    }
-
-                    if (password.length < 8) {
-                        alert('Password must be at least 8 characters long!');
-                        return;
-                    }
-
-                    const agreeTerms = document.getElementById('agreeTerms').checked;
-                    if (!agreeTerms) {
-                        alert('Please agree to the Terms & Conditions!');
-                        return;
-                    }
-
-                    alert('Registration successful! (This is a demo - backend integration required)');
-                } else {
-                    alert('Login successful! (This is a demo - backend integration required)');
-                }
-            });
-        });
 
         // Social login handlers
         document.querySelectorAll('.btn-social').forEach(btn => {

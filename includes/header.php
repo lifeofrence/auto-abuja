@@ -69,9 +69,28 @@
             </button>
         </div> -->
 
-        <a href="auth.php" class="btn btn-primary py-4 px-lg-5 d-none d-lg-block">
-            <i class="fa fa-user me-2"></i> Login
-        </a>
+        <?php if (is_logged_in()): ?>
+            <div class="nav-item dropdown d-none d-lg-block">
+                <a href="#" class="nav-link dropdown-toggle btn btn-primary py-4 px-lg-5 text-white"
+                    data-bs-toggle="dropdown">
+                    <i class="fa fa-user-circle me-2"></i>
+                    <?php echo explode(' ', $_SESSION['name'])[0]; ?>
+                </a>
+                <div class="dropdown-menu fade-up m-0 shadow-sm border-0">
+                    <a href="dashboard.php" class="dropdown-item"><i class="fa fa-tachometer-alt me-2"></i>Dashboard</a>
+                    <a href="profile-edit.php" class="dropdown-item"><i class="fa fa-user-edit me-2"></i>Profile</a>
+                    <a href="logout.php" class="dropdown-item text-danger"><i class="fa fa-sign-out-alt me-2"></i>Logout</a>
+                </div>
+            </div>
+            <!-- Mobile login link -->
+            <a href="dashboard.php" class="nav-item nav-link d-lg-none">Dashboard</a>
+            <a href="logout.php" class="nav-item nav-link d-lg-none text-danger">Logout</a>
+        <?php else: ?>
+            <a href="auth.php" class="btn btn-primary py-4 px-lg-5 d-none d-lg-block">
+                <i class="fa fa-user me-2"></i> Login / Register
+            </a>
+            <a href="auth.php" class="nav-item nav-link d-lg-none">Login / Register</a>
+        <?php endif; ?>
 
     </div>
 </nav>
