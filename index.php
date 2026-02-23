@@ -1,3 +1,107 @@
+<?php
+require_once 'includes/config.php';
+
+// Fetch categories for the search bar
+$search_categories_query = "SELECT name, slug FROM categories WHERE is_active = TRUE ORDER BY display_order";
+$search_categories_result = $conn->query($search_categories_query);
+
+// Search Results Logic
+$show_results = false;
+$search_business_results = null;
+$search_product_results = null;
+
+if (isset($_GET['search']) || isset($_GET['category'])) {
+    $show_results = true;
+    $search = isset($_GET['search']) ? sanitize_input($_GET['search']) : '';
+    $category_slug = isset($_GET['category']) ? sanitize_input($_GET['category']) : '';
+
+    // 1. Search Businesses
+    $where_clauses = ["b.status = 'approved'"];
+    if ($category_slug) {
+        $where_clauses[] = "c.slug = '$category_slug'";
+    }
+    if ($search) {
+        $where_clauses[] = "(b.business_name LIKE '%$search%' OR b.description LIKE '%$search%' OR b.address LIKE '%$search%' 
+                            OR b.id IN (SELECT business_id FROM products WHERE name LIKE '%$search%' OR description LIKE '%$search%'))";
+    }
+
+    $where_sql = implode(' AND ', $where_clauses);
+
+    $query_b = "SELECT b.*, c.name as category_name, c.slug as category_slug, 
+              sc.name as subcategory_name, sc.slug as subcategory_slug, sc.badge_color
+              FROM businesses b
+              LEFT JOIN categories c ON b.category_id = c.id
+              LEFT JOIN subcategories sc ON b.subcategory_id = sc.id
+              WHERE $where_sql
+              ORDER BY b.is_featured DESC, b.created_at DESC
+              LIMIT 12";
+
+    $search_business_results = $conn->query($query_b);
+
+    // 2. Search Products
+    $p_where = ["p.is_available = TRUE"];
+    if ($search) {
+        $p_where[] = "(p.name LIKE '%$search%' OR p.description LIKE '%$search%')";
+    }
+    if ($category_slug) {
+        $p_where[] = "c.slug = '$category_slug'";
+    }
+    $p_where_sql = implode(' AND ', $p_where);
+
+    $query_p = "SELECT p.*, b.business_name, b.slug as business_slug, c.name as category_name
+                FROM products p
+                JOIN businesses b ON p.business_id = b.id
+                JOIN categories c ON b.category_id = c.id
+                WHERE $p_where_sql
+                ORDER BY p.created_at DESC
+                LIMIT 12";
+    $search_product_results = $conn->query($query_p);
+}
+
+// Fetch Featured Products for the grid
+$featured_products_query = "SELECT p.*, b.business_name, b.slug as business_slug 
+                           FROM products p 
+                           JOIN businesses b ON p.business_id = b.id 
+                           WHERE p.is_available = TRUE 
+                           ORDER BY p.is_featured DESC, p.created_at DESC 
+                           LIMIT 8";
+$featured_products_result = $conn->query($featured_products_query);
+// Fetch Carousel Advertisements (homepage_top)
+$carousel_ads_query = "SELECT * FROM advertisements WHERE position = 'homepage_top' AND is_active = TRUE ORDER BY display_order";
+$carousel_ads_result = $conn->query($carousel_ads_query);
+
+// Fetch Promo Advertisements (homepage_middle)
+$promo_ads_query = "SELECT * FROM advertisements WHERE position = 'homepage_middle' AND is_active = TRUE ORDER BY display_order LIMIT 3";
+$promo_ads_result = $conn->query($promo_ads_query);
+
+// Fetch Leading Businesses by Primary Categories
+function get_businesses_by_category($conn, $category_slug, $limit = 4)
+{
+    $sql = "SELECT b.*, c.name as category_name, c.slug as category_slug 
+            FROM businesses b 
+            JOIN categories c ON b.category_id = c.id 
+            WHERE c.slug = '$category_slug' AND b.status = 'approved' 
+            ORDER BY b.is_featured DESC, b.created_at DESC 
+            LIMIT $limit";
+    return $conn->query($sql);
+}
+
+$mechanics_result = get_businesses_by_category($conn, 'mechanics', 8);
+$dealers_result = get_businesses_by_category($conn, 'dealers', 8);
+$spare_parts_result = get_businesses_by_category($conn, 'spare-parts', 8);
+$towing_result = get_businesses_by_category($conn, 'towing', 8);
+$recyclers_result = get_businesses_by_category($conn, 'recyclers', 8);
+
+// Fetch Partners
+$partners_result = $conn->query("SELECT * FROM partners ORDER BY display_order");
+
+// Fetch Testimonials
+$testimonials_result = $conn->query("SELECT * FROM testimonials ORDER BY created_at DESC");
+
+// Fetch All Categories for the Grid
+$all_categories_query = "SELECT * FROM categories WHERE is_active = TRUE ORDER BY display_order";
+$all_categories_result = $conn->query($all_categories_query);
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -47,8 +151,8 @@
                         providers</p>
 
                     <!-- Search Bar -->
-                    <!-- <div class="search-container bg-white rounded-3 p-2 shadow-lg">
-                        <form action="listings.php" method="GET" class="row g-2 align-items-center">
+                    <div class="search-container bg-white rounded-3 p-2 shadow-lg">
+                        <form action="index.php" method="GET" class="row g-2 align-items-center">
                             <div class="col-md-5">
                                 <input type="text" name="search" class="form-control border-0 py-3"
                                     placeholder="What are you looking for?" style="font-size: 16px;">
@@ -56,12 +160,20 @@
                             <div class="col-md-4">
                                 <select name="category" class="form-select border-0 py-3" style="font-size: 16px;">
                                     <option value="">All Categories</option>
-                                    <option value="mechanics">Auto Mechanics & Technicians</option>
-                                    <option value="dealers">Automobile Dealerships</option>
-                                    <option value="spare-parts">Auto Spare Parts</option>
-                                    <option value="towing">Tow Truck Operators</option>
-                                    <option value="recyclers">Auto Dismantlers & Recyclers</option>
-                                    <option value="service-stations">Service Stations</option>
+                                    <?php if ($search_categories_result && $search_categories_result->num_rows > 0): ?>
+                                        <?php while ($cat = $search_categories_result->fetch_assoc()): ?>
+                                            <option value="<?php echo htmlspecialchars($cat['slug']); ?>">
+                                                <?php echo htmlspecialchars($cat['name']); ?>
+                                            </option>
+                                        <?php endwhile; ?>
+                                    <?php else: ?>
+                                        <option value="mechanics">Auto Mechanics & Technicians</option>
+                                        <option value="dealers">Automobile Dealerships</option>
+                                        <option value="spare-parts">Auto Spare Parts</option>
+                                        <option value="towing">Tow Truck Operators</option>
+                                        <option value="recyclers">Auto Dismantlers & Recyclers</option>
+                                        <option value="service-stations">Service Stations</option>
+                                    <?php endif; ?>
                                 </select>
                             </div>
                             <div class="col-md-3">
@@ -71,12 +183,13 @@
                                 </button>
                             </div>
                         </form>
-                    </div> -->
-                    <div class="row mb-5 wow fadeInUp" data-wow-delay="0.2s">
+                    </div>
+
+                    <!-- <div class="row mb-5 wow fadeInUp" data-wow-delay="0.2s">
                         <div class="col-lg-12">
                             <div class="bg-light p-4 rounded">
                                 <div class="row g-3 align-items-center">
-                                    <!-- Search Bar -->
+                                  
                                     <div class="col-lg-8">
                                         <div class="input-group">
                                             <input type="text" class="form-control" id="productSearch"
@@ -88,7 +201,7 @@
                                         </div>
                                     </div>
 
-                                    <!-- Category Filter -->
+                                  
                                     <div class="col-lg-4">
                                         <select class="form-select" id="categoryFilter">
                                             <option value="mechanics">Auto Mechanics & Technicians</option>
@@ -101,21 +214,135 @@
                                     </div>
                                 </div>
 
-                                <!-- Results Count -->
-                                <!-- <div class="mt-3">
-                                    <p class="mb-0 text-muted">
-                                        <i class="fa fa-info-circle me-2"></i>
-                                        Showing <span id="productCount">4</span> product(s)
-                                    </p>
-                                </div> -->
+
                             </div>
                         </div>
-                    </div>
+                    </div> -->
                 </div>
             </div>
         </div>
     </div>
     <!-- Hero Section End -->
+
+    <?php if ($show_results): ?>
+        <!-- Search Results Section Start -->
+        <div class="container-xxl py-5" id="searchResults">
+            <div class="container">
+                <div class="text-center mb-5">
+                    <h2 class="mb-3 fw-bold">Search Results</h2>
+                    <p class="text-muted">Explore businesses and products matching your criteria</p>
+                    <a href="index.php" class="btn btn-link text-primary p-0">Clear Search</a>
+                </div>
+
+                <!-- Product Results -->
+                <div class="mb-5">
+                    <h4 class="fw-bold mb-4"><i class="fa fa-box me-2 text-primary"></i>Products & Services
+                        (<?php echo $search_product_results ? $search_product_results->num_rows : 0; ?>)</h4>
+                    <div class="row g-4">
+                        <?php if ($search_product_results && $search_product_results->num_rows > 0): ?>
+                            <?php while ($product = $search_product_results->fetch_assoc()): ?>
+                                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.1s">
+                                    <div class="card h-100 border-0 shadow-sm hover-lift"
+                                        style="border-radius: 12px; overflow: hidden;">
+                                        <div class="position-relative">
+                                            <img src="<?php echo $product['image'] ?: 'img/default-product.jpg'; ?>"
+                                                class="card-img-top" style="height: 160px; object-fit: cover;"
+                                                alt="<?php echo htmlspecialchars($product['name'] ?? ''); ?>">
+                                            <div class="position-absolute bottom-0 end-0 p-2">
+                                                <span
+                                                    class="badge bg-primary px-2 py-1 shadow-sm">₦<?php echo number_format($product['price'], 2); ?></span>
+                                            </div>
+                                        </div>
+                                        <div class="card-body">
+                                            <h6 class="fw-bold mb-1 text-dark text-truncate">
+                                                <?php echo htmlspecialchars($product['name'] ?? ''); ?>
+                                            </h6>
+                                            <p class="text-muted small mb-2">By: <a
+                                                    href="business-detail.php?slug=<?php echo $product['business_slug']; ?>"
+                                                    class="text-primary fw-bold"><?php echo htmlspecialchars($product['business_name'] ?? ''); ?></a>
+                                            </p>
+                                            <p class="text-muted small mb-3">
+                                                <?php echo substr(htmlspecialchars($product['description'] ?? ''), 0, 60); ?>...
+                                            </p>
+                                            <a href="product-detail.php?slug=<?php echo $product['slug']; ?>"
+                                                class="btn btn-dark btn-sm w-100" style="border-radius: 6px;">View Product</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endwhile; ?>
+                        <?php else: ?>
+                            <div class="col-12">
+                                <div class="alert alert-light border text-center text-muted">No matching products or services
+                                    found.</div>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- Business Results -->
+                <div>
+                    <h4 class="fw-bold mb-4"><i class="fa fa-building me-2 text-primary"></i>Businesses
+                        (<?php echo $search_business_results ? $search_business_results->num_rows : 0; ?>)</h4>
+                    <div class="row g-4">
+                        <?php if ($search_business_results && $search_business_results->num_rows > 0): ?>
+                            <?php while ($business = $search_business_results->fetch_assoc()): ?>
+                                <div class="col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="0.1s">
+                                    <div class="card h-100 border-0 shadow-sm hover-lift"
+                                        style="border-radius: 12px; overflow: hidden;">
+                                        <div class="position-relative">
+                                            <img src="<?php echo $business['cover_image'] ?: 'img/default-business.jpg'; ?>"
+                                                class="card-img-top" style="height: 180px; object-fit: cover;"
+                                                alt="<?php echo htmlspecialchars($business['business_name'] ?? ''); ?>">
+                                            <?php if ($business['is_featured']): ?>
+                                                <div class="position-absolute top-0 end-0 p-2">
+                                                    <span class="badge bg-warning text-dark shadow-sm"><i
+                                                            class="fa fa-star me-1"></i>Featured</span>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php if ($business['verified']): ?>
+                                                <div class="position-absolute top-0 start-0 p-2">
+                                                    <span class="badge bg-success shadow-sm"><i
+                                                            class="fa fa-check-circle me-1"></i>Verified</span>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="card-body">
+                                            <h5 class="fw-bold mb-1 text-dark text-truncate">
+                                                <?php echo htmlspecialchars($business['business_name'] ?? ''); ?>
+                                            </h5>
+                                            <span
+                                                class="badge bg-light text-primary mb-2"><?php echo htmlspecialchars($business['category_name'] ?? ''); ?></span>
+                                            <p class="text-muted small mb-3">
+                                                <?php echo substr(htmlspecialchars($business['description'] ?? ''), 0, 80); ?>...
+                                            </p>
+                                            <div class="mb-3">
+                                                <div class="text-muted small mb-1"><i
+                                                        class="fa fa-map-marker-alt me-2 text-primary"></i><?php echo htmlspecialchars($business['address'] ?? ''); ?>
+                                                </div>
+                                                <div class="text-muted small"><i
+                                                        class="fa fa-phone me-2 text-primary"></i><?php echo htmlspecialchars($business['phone'] ?? ''); ?>
+                                                </div>
+                                            </div>
+                                            <a href="business-detail.php?slug=<?php echo $business['slug']; ?>"
+                                                class="btn btn-outline-dark btn-sm w-100" style="border-radius: 6px;">View
+                                                Business</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endwhile; ?>
+                        <?php else: ?>
+                            <div class="col-12">
+                                <div class="alert alert-light border text-center text-muted">No matching businesses found.</div>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <hr class="mt-5">
+            </div>
+        </div>
+        <!-- Search Results Section End -->
+    <?php endif; ?>
 
 
 
@@ -133,115 +360,49 @@
 
             <!-- Products Grid -->
             <div class="row g-4" id="productsGrid">
-                <!-- Product 1 -->
-                <div class="col-lg-3 col-md-6 wow fadeInUp product-item" data-wow-delay="0.1s" data-category="vehicles"
-                    data-name="Benz GLE 2016">
-                    <div class="card h-100 border-0 shadow">
-                        <div class="position-relative">
-                            <img src="img/gle.jpg" class="card-img-top" alt="Benz GLE 2016">
-                            <div class="position-absolute top-0 end-0 p-2">
-                                <!-- <button class="btn btn-sm btn-light rounded-circle wishlist-btn"
-                                    data-product="Benz GLE 2016" title="Add to Wishlist">
-                                    <i class="fa fa-heart"></i>
-                                </button> -->
+                <?php if ($featured_products_result && $featured_products_result->num_rows > 0): ?>
+                    <?php
+                    $delay = 0.1;
+                    while ($product = $featured_products_result->fetch_assoc()):
+                        ?>
+                        <div class="col-lg-3 col-md-6 wow fadeInUp product-item" data-wow-delay="<?php echo $delay; ?>s">
+                            <div class="card h-100 border-0 shadow">
+                                <div class="position-relative">
+                                    <img src="<?php echo htmlspecialchars(($product['image'] ?? '') ?: 'img/default-product.jpg'); ?>"
+                                        class="card-img-top" alt="<?php echo htmlspecialchars($product['name'] ?? ''); ?>"
+                                        style="height: 200px; object-fit: cover;">
+                                </div>
+                                <div class="card-body text-center">
+                                    <h5 class="card-title mb-3">
+                                        <?php echo htmlspecialchars($product['name'] ?? ''); ?>
+                                    </h5>
+                                    <h4 class="mb-3" style="color: #F68B1E;">₦
+                                        <?php echo number_format($product['price'], 2); ?>
+                                    </h4>
+                                    <p class="text-muted mb-2">
+                                        <i class="fa fa-check-circle text-success"></i>
+                                        Available:
+                                        <?php echo $product['is_available'] ? 'Yes' : 'No'; ?>
+                                    </p>
+                                    <p class="text-secondary mb-3 small">By:
+                                        <?php echo htmlspecialchars($product['business_name'] ?? ''); ?>
+                                    </p>
+                                    <a href="product-detail.php?slug=<?php echo $product['slug']; ?>"
+                                        class="btn btn-outline-dark w-100 btn-sm">View Details</a>
+                                </div>
                             </div>
                         </div>
-                        <div class="card-body text-center">
-                            <h5 class="card-title mb-3">Benz GLE 2016</h5>
-                            <h4 class="mb-3" style="color: #F68B1E;">₦15,000,000</h4>
-                            <p class="text-muted mb-2"><i class="fa fa-check-circle text-success"></i> Available: 6</p>
-                            <p class="text-secondary mb-3 small">Quote Product #: VEH-001</p>
-                            <!-- <button class="btn w-100 mb-2 add-to-cart" data-product="Benz GLE 2016"
-                                data-price="15000000" style="background: #F68B1E; border: none; color: #000;">
-                                <i class="fa fa-shopping-cart"></i> Add to Cart
-                            </button> -->
-                            <a href="#" class="btn btn-outline-dark w-100 btn-sm">View Details</a>
-                        </div>
+                        <?php
+                        $delay += 0.2;
+                    endwhile;
+                    ?>
+                <?php else: ?>
+                    <div class="col-12 text-center">
+                        <p class="text-muted">No featured products available at the moment.</p>
                     </div>
-                </div>
-
-                <!-- Product 2 -->
-                <div class="col-lg-3 col-md-6 wow fadeInUp product-item" data-wow-delay="0.3s" data-category="vehicles"
-                    data-name="Camry 08">
-                    <div class="card h-100 border-0 shadow">
-                        <div class="position-relative">
-                            <img src="img/camry08.jpg" class="card-img-top" alt="Camry 08">
-                            <div class="position-absolute top-0 end-0 p-2">
-                                <!-- <button class="btn btn-sm btn-light rounded-circle wishlist-btn" data-product="Camry 08"
-                                    title="Add to Wishlist">
-                                    <i class="fa fa-heart"></i>
-                                </button> -->
-                            </div>
-                        </div>
-                        <div class="card-body text-center">
-                            <h5 class="card-title mb-3">Camry 08</h5>
-                            <h4 class="mb-3" style="color: #F68B1E;">₦2,500,000</h4>
-                            <p class="text-muted mb-2"><i class="fa fa-check-circle text-success"></i> Available: 6</p>
-                            <p class="text-secondary mb-3 small">Quote Product #: VEH-002</p>
-                            <!-- <button class="btn w-100 mb-2 add-to-cart" data-product="Camry 08" data-price="2500000"
-                                style="background: #F68B1E; border: none; color: #000;">
-                                <i class="fa fa-shopping-cart"></i> Add to Cart
-                            </button> -->
-                            <a href="#" class="btn btn-outline-dark w-100 btn-sm">View Details</a>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Product 3 -->
-                <div class="col-lg-3 col-md-6 wow fadeInUp product-item" data-wow-delay="0.5s" data-category="vehicles"
-                    data-name="EV Car">
-                    <div class="card h-100 border-0 shadow">
-                        <div class="position-relative">
-                            <img src="img/ev.jpg" class="card-img-top" alt="EV Car">
-                            <div class="position-absolute top-0 end-0 p-2">
-                                <!-- <button class="btn btn-sm btn-light rounded-circle wishlist-btn" data-product="EV Car"
-                                    title="Add to Wishlist">
-                                    <i class="fa fa-heart"></i>
-                                </button> -->
-                            </div>
-                        </div>
-                        <div class="card-body text-center">
-                            <h5 class="card-title mb-3">EV Car</h5>
-                            <h4 class="mb-3" style="color: #F68B1E;">₦8,000,000</h4>
-                            <p class="text-muted mb-2"><i class="fa fa-check-circle text-success"></i> Available: 6</p>
-                            <p class="text-secondary mb-3 small">Quote Product #: VEH-003</p>
-                            <!-- <button class="btn w-100 mb-2 add-to-cart" data-product="EV Car" data-price="8000000"
-                                style="background: #F68B1E; border: none; color: #000;">
-                                <i class="fa fa-shopping-cart"></i> Add to Cart
-                            </button> -->
-                            <a href="#" class="btn btn-outline-dark w-100 btn-sm">View Details</a>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Product 4 -->
-                <div class="col-lg-3 col-md-6 wow fadeInUp product-item" data-wow-delay="0.7s" data-category="services"
-                    data-name="Car Servicing">
-                    <div class="card h-100 border-0 shadow">
-                        <div class="position-relative">
-                            <img src="img/service.jpg" class="card-img-top" alt="Servicing">
-                            <div class="position-absolute top-0 end-0 p-2">
-                                <!-- <button class="btn btn-sm btn-light rounded-circle wishlist-btn"
-                                    data-product="Car Servicing" title="Add to Wishlist">
-                                    <i class="fa fa-heart"></i>
-                                </button> -->
-                            </div>
-                        </div>
-                        <div class="card-body text-center">
-                            <h5 class="card-title mb-3">Car Servicing</h5>
-                            <h4 class="mb-3" style="color: #F68B1E;">₦50,000</h4>
-                            <p class="text-muted mb-2"><i class="fa fa-check-circle text-success"></i> Available:
-                                Unlimited</p>
-                            <p class="text-secondary mb-3 small">Quote Product #: SRV-001</p>
-                            <!-- <button class="btn w-100 mb-2 add-to-cart" data-product="Car Servicing" data-price="50000"
-                                style="background: #F68B1E; border: none; color: #000;">
-                                <i class="fa fa-shopping-cart"></i> Add to Cart
-                            </button> -->
-                            <a href="#" class="btn btn-outline-dark w-100 btn-sm">View Details</a>
-                        </div>
-                    </div>
-                </div>
+                <?php endif; ?>
             </div>
+
 
             <!-- No Results Message -->
             <div class="row mt-4 d-none" id="noResults">
@@ -272,85 +433,29 @@
                 </a>
             </div>
             <div class="row g-4">
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.1s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/mechanic_1.png" class="card-img-top" alt="QuickFix Auto"
-                                style="height: 180px; object-fit: cover;">
-                            <div class="position-absolute top-0 start-0 m-2">
-                                <span class="badge bg-success"><i class="fa fa-check-circle me-1"></i>Verified</span>
-                            </div>
+                <?php if ($mechanics_result && $mechanics_result->num_rows > 0): ?>
+                    <?php while ($business = $mechanics_result->fetch_assoc()): ?>
+                        <div class="col-lg-3 col-md-4 col-sm-6 wow fadeInUp" data-wow-delay="0.1s">
+                            <a href="business-detail.php?slug=<?php echo $business['slug']; ?>" class="text-decoration-none">
+                                <div class="bg-white p-2 rounded shadow-sm hover-lift text-center h-100">
+                                    <img src="<?php echo htmlspecialchars($business['cover_image'] ?? 'img/default-business.jpg'); ?>"
+                                        class="img-fluid rounded mb-3"
+                                        alt="<?php echo htmlspecialchars($business['business_name'] ?? ''); ?>"
+                                        style="height: 180px; width: 100%; object-fit: cover;">
+                                    <h5 class="fw-bold text-dark px-2">
+                                        <?php echo htmlspecialchars($business['business_name'] ?? ''); ?>
+                                    </h5>
+                                    <?php if ($business['verified']): ?>
+                                        <div class="mt-2">
+                                            <span class="badge bg-success small"><i
+                                                    class="fa fa-check-circle me-1"></i>Verified</span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </a>
                         </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">QuickFix Auto Workshop</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="fa fa-star"></i>
-                                <span class="text-muted ms-1">(48)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Garki 2, Abuja</p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
-                    </div>
-                </div>
-                <!-- More items for Mechanics can be added here -->
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.3s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/service-1.jpg" class="card-img-top" alt="Premium Care"
-                                style="height: 180px; object-fit: cover;">
-                            <div class="position-absolute top-0 start-0 m-2">
-                                <span class="badge bg-primary">Top Rated</span>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">Premium Engine Care</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="fa fa-star-half-alt"></i>
-                                <span class="text-muted ms-1">(32)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Wuse II, Abuja</p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.5s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/service-2.jpg" class="card-img-top" alt="Elite Workshop"
-                                style="height: 180px; object-fit: cover;">
-                        </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">Elite Auto Workshop</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="far fa-star"></i>
-                                <span class="text-muted ms-1">(25)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Maitama, Abuja</p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.7s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/service-3.jpg" class="card-img-top" alt="Precision Tech"
-                                style="height: 180px; object-fit: cover;">
-                        </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">Precision Technicians</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="fa fa-star"></i>
-                                <span class="text-muted ms-1">(19)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Asokoro, Abuja</p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
-                    </div>
-                </div>
+                    <?php endwhile; ?>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -369,82 +474,33 @@
                 </a>
             </div>
             <div class="row g-4">
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.1s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/dealer_1.png" class="card-img-top" alt="Metro Motors"
-                                style="height: 180px; object-fit: cover;">
-                            <div class="position-absolute top-0 start-0 m-2">
-                                <span class="badge bg-success"><i class="fa fa-check-circle me-1"></i>Verified</span>
-                            </div>
+                <?php if ($dealers_result && $dealers_result->num_rows > 0): ?>
+                    <?php while ($business = $dealers_result->fetch_assoc()): ?>
+                        <div class="col-lg-3 col-md-4 col-sm-6 wow fadeInUp" data-wow-delay="0.1s">
+                            <a href="business-detail.php?slug=<?php echo $business['slug']; ?>" class="text-decoration-none">
+                                <div class="bg-white p-2 rounded shadow-sm hover-lift text-center h-100">
+                                    <img src="<?php echo htmlspecialchars($business['cover_image'] ?? 'img/default-business.jpg'); ?>"
+                                        class="img-fluid rounded mb-3"
+                                        alt="<?php echo htmlspecialchars($business['business_name'] ?? ''); ?>"
+                                        style="height: 180px; width: 100%; object-fit: cover;">
+                                    <h5 class="fw-bold text-dark px-2">
+                                        <?php echo htmlspecialchars($business['business_name'] ?? ''); ?>
+                                    </h5>
+                                    <?php if ($business['verified']): ?>
+                                        <div class="mt-2">
+                                            <span class="badge bg-success small"><i
+                                                    class="fa fa-check-circle me-1"></i>Verified</span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </a>
                         </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">Metro Motors Abuja</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="fa fa-star"></i>
-                                <span class="text-muted ms-1">(124)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Central Area,
-                                Abuja</p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <div class="col-12 text-center">
+                        <p class="text-muted">No dealers listed yet.</p>
                     </div>
-                </div>
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.3s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/gle.jpg" class="card-img-top" alt="Elite Cars"
-                                style="height: 180px; object-fit: cover;">
-                        </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">Elite Car Sales</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="far fa-star"></i>
-                                <span class="text-muted ms-1">(86)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Maitama, Abuja</p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.5s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/camry08.jpg" class="card-img-top" alt="Unity Dealers"
-                                style="height: 180px; object-fit: cover;">
-                        </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">Unity Auto Dealers</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="fa fa-star"></i>
-                                <span class="text-muted ms-1">(54)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Gudu, Abuja</p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.7s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/ev.jpg" class="card-img-top" alt="Future Motors"
-                                style="height: 180px; object-fit: cover;">
-                        </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">Future Motors EV</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="fa fa-star-half-alt"></i>
-                                <span class="text-muted ms-1">(21)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Jabi, Abuja</p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
-                    </div>
-                </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -463,154 +519,121 @@
                 </a>
             </div>
             <div class="row g-4">
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.1s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/parts_1.png" class="card-img-top" alt="Genuine Parts Hub"
-                                style="height: 180px; object-fit: cover;">
-                            <div class="position-absolute top-0 start-0 m-2">
-                                <span class="badge bg-success"><i class="fa fa-check-circle me-1"></i>Verified</span>
-                            </div>
+                <?php if ($spare_parts_result && $spare_parts_result->num_rows > 0): ?>
+                    <?php while ($business = $spare_parts_result->fetch_assoc()): ?>
+                        <div class="col-lg-3 col-md-4 col-sm-6 wow fadeInUp" data-wow-delay="0.1s">
+                            <a href="business-detail.php?slug=<?php echo $business['slug']; ?>" class="text-decoration-none">
+                                <div class="bg-white p-2 rounded shadow-sm hover-lift text-center h-100">
+                                    <img src="<?php echo htmlspecialchars($business['cover_image'] ?? 'img/default-business.jpg'); ?>"
+                                        class="img-fluid rounded mb-3"
+                                        alt="<?php echo htmlspecialchars($business['business_name'] ?? ''); ?>"
+                                        style="height: 180px; width: 100%; object-fit: cover;">
+                                    <h5 class="fw-bold text-dark px-2">
+                                        <?php echo htmlspecialchars($business['business_name'] ?? ''); ?>
+                                    </h5>
+                                    <?php if ($business['verified']): ?>
+                                        <div class="mt-2">
+                                            <span class="badge bg-success small"><i
+                                                    class="fa fa-check-circle me-1"></i>Verified</span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </a>
                         </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">Genuine Parts Hub</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="fa fa-star"></i>
-                                <span class="text-muted ms-1">(215)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Apo Mechanic
-                                Village</p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <div class="col-12 text-center">
+                        <p class="text-muted">No spare part shops listed yet.</p>
                     </div>
-                </div>
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.3s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/service-4.jpg" class="card-img-top" alt="Master Parts"
-                                style="height: 180px; object-fit: cover;">
-                        </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">Master Spare Parts</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="far fa-star"></i>
-                                <span class="text-muted ms-1">(42)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Gwagwalada, Abuja
-                            </p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.5s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/tools.webp" class="card-img-top" alt="Abuja Parts"
-                                style="height: 180px; object-fit: cover;">
-                        </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">Abuja Parts World</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="fa fa-star"></i>
-                                <span class="text-muted ms-1">(93)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Central Area,
-                                Abuja</p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6 wow fadeInUp" data-wow-delay="0.7s">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="position-relative">
-                            <img src="img/service.jpg" class="card-img-top" alt="Brake Specialist"
-                                style="height: 180px; object-fit: cover;">
-                        </div>
-                        <div class="card-body">
-                            <h6 class="fw-bold mb-1">Brake & Suspension Hub</h6>
-                            <div class="text-warning small mb-2">
-                                <i class="fa fa-star"></i><i class="fa fa-star"></i><i class="fa fa-star"></i><i
-                                    class="fa fa-star"></i><i class="fa fa-star-half-alt"></i>
-                                <span class="text-muted ms-1">(15)</span>
-                            </div>
-                            <p class="text-muted small mb-3"><i class="fa fa-map-marker-alt me-2"></i>Kuje, Abuja</p>
-                            <a href="#" class="btn btn-outline-dark btn-sm w-100">View Details</a>
-                        </div>
-                    </div>
-                </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
 
-    <!-- 4. Tow Truck Operators & More (Compact Grid) -->
+    <!-- 4. Tow Truck Operators -->
     <div class="container-xxl py-5">
         <div class="container">
-            <div class="text-center mb-5 wow fadeInUp" data-wow-delay="0.1s">
-                <h6 class="text-uppercase mb-2" style="color: #F68B1E; font-weight: 600; letter-spacing: 2px;">
-                    Additional Categories</h6>
-                <h2 class="mb-3 fw-bold">Tow Truck, Recycling & Service Stations</h2>
+            <div class="d-flex justify-content-between align-items-center mb-4 wow fadeInUp" data-wow-delay="0.1s">
+                <div>
+                    <h3 class="fw-bold mb-0">Tow Truck Operators</h3>
+                    <p class="text-muted small mb-0">Reliable towing and recovery services in Abuja</p>
+                </div>
+                <a href="listings.php?category=towing" class="btn btn-sm fw-bold px-3 py-2"
+                    style="background: #F68B1E; color: #000; border: none;">
+                    See All <i class="fa fa-chevron-right ms-1"></i>
+                </a>
             </div>
             <div class="row g-4">
-                <!-- Tow Truck Operators -->
-                <div class="col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="0.1s">
-                    <div class="bg-white rounded-3 p-4 shadow-sm hover-lift border-0 h-100">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="icon-box rounded-circle bg-dark d-flex align-items-center justify-content-center me-3"
-                                style="width: 50px; height: 50px;">
-                                <i class="fa fa-truck-pickup text-white"></i>
-                            </div>
-                            <h5 class="fw-bold mb-0">Tow Truck Operators</h5>
+                <?php if ($towing_result && $towing_result->num_rows > 0): ?>
+                    <?php while ($business = $towing_result->fetch_assoc()): ?>
+                        <div class="col-lg-3 col-md-4 col-sm-6 wow fadeInUp" data-wow-delay="0.1s">
+                            <a href="business-detail.php?slug=<?php echo $business['slug']; ?>" class="text-decoration-none">
+                                <div class="bg-white p-2 rounded shadow-sm hover-lift text-center h-100">
+                                    <img src="<?php echo htmlspecialchars($business['cover_image'] ?? 'img/default-business.jpg'); ?>"
+                                        class="img-fluid rounded mb-3"
+                                        alt="<?php echo htmlspecialchars($business['business_name'] ?? ''); ?>"
+                                        style="height: 180px; width: 100%; object-fit: cover;">
+                                    <h5 class="fw-bold text-dark px-2">
+                                        <?php echo htmlspecialchars($business['business_name'] ?? ''); ?></h5>
+                                    <?php if ($business['verified']): ?>
+                                        <div class="mt-2">
+                                            <span class="badge bg-success small"><i
+                                                    class="fa fa-check-circle me-1"></i>Verified</span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </a>
                         </div>
-                        <ul class="list-unstyled mb-4 small text-muted">
-                            <li class="mb-2"><i class="fa fa-check text-success me-2"></i>24/7 Emergency Towing</li>
-                            <li class="mb-2"><i class="fa fa-check text-success me-2"></i>Flatbed & Wheel-Lift</li>
-                            <li class="mb-2"><i class="fa fa-check text-success me-2"></i>Verified Operators</li>
-                        </ul>
-                        <a href="listings.php?category=towing" class="btn btn-outline-dark w-100 btn-sm">Explore Towing
-                            Services</a>
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <div class="col-12 text-center">
+                        <p class="text-muted">No tow truck operators listed yet.</p>
                     </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. Auto Dismantlers & Recyclers -->
+    <div class="container-xxl py-5" style="background-color: #f8f9fa;">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center mb-4 wow fadeInUp" data-wow-delay="0.1s">
+                <div>
+                    <h3 class="fw-bold mb-0">Auto Dismantlers & Recyclers</h3>
+                    <p class="text-muted small mb-0">Sustainable vehicle dismantling and recycling hub</p>
                 </div>
-                <!-- Auto Dismantlers & Recyclers -->
-                <div class="col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="0.3s">
-                    <div class="bg-white rounded-3 p-4 shadow-sm hover-lift border-0 h-100">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="icon-box rounded-circle bg-dark d-flex align-items-center justify-content-center me-3"
-                                style="width: 50px; height: 50px;">
-                                <i class="fa fa-recycle text-white"></i>
-                            </div>
-                            <h5 class="fw-bold mb-0">Auto Dismantlers</h5>
+                <a href="listings.php?category=recyclers" class="btn btn-sm fw-bold px-3 py-2"
+                    style="background: #F68B1E; color: #000; border: none;">
+                    See All <i class="fa fa-chevron-right ms-1"></i>
+                </a>
+            </div>
+            <div class="row g-4">
+                <?php if ($recyclers_result && $recyclers_result->num_rows > 0): ?>
+                    <?php while ($business = $recyclers_result->fetch_assoc()): ?>
+                        <div class="col-lg-3 col-md-4 col-sm-6 wow fadeInUp" data-wow-delay="0.1s">
+                            <a href="business-detail.php?slug=<?php echo $business['slug']; ?>" class="text-decoration-none">
+                                <div class="bg-white p-2 rounded shadow-sm hover-lift text-center h-100">
+                                    <img src="<?php echo htmlspecialchars($business['cover_image'] ?? 'img/default-business.jpg'); ?>"
+                                        class="img-fluid rounded mb-3"
+                                        alt="<?php echo htmlspecialchars($business['business_name'] ?? ''); ?>"
+                                        style="height: 180px; width: 100%; object-fit: cover;">
+                                    <h5 class="fw-bold text-dark px-2">
+                                        <?php echo htmlspecialchars($business['business_name'] ?? ''); ?></h5>
+                                    <?php if ($business['verified']): ?>
+                                        <div class="mt-2">
+                                            <span class="badge bg-success small"><i
+                                                    class="fa fa-check-circle me-1"></i>Verified</span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </a>
                         </div>
-                        <ul class="list-unstyled mb-4 small text-muted">
-                            <li class="mb-2"><i class="fa fa-check text-success me-2"></i>Eco-Friendly Recycling</li>
-                            <li class="mb-2"><i class="fa fa-check text-success me-2"></i>Used Parts Recovery</li>
-                            <li class="mb-2"><i class="fa fa-check text-success me-2"></i>Scrap Car Disposal</li>
-                        </ul>
-                        <a href="listings.php?category=recyclers" class="btn btn-outline-dark w-100 btn-sm">Explore
-                            Recycling</a>
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <div class="col-12 text-center">
+                        <p class="text-muted">No recyclers listed yet.</p>
                     </div>
-                </div>
-                <!-- Service Stations -->
-                <div class="col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="0.5s">
-                    <div class="bg-white rounded-3 p-4 shadow-sm hover-lift border-0 h-100">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="icon-box rounded-circle bg-dark d-flex align-items-center justify-content-center me-3"
-                                style="width: 50px; height: 50px;">
-                                <i class="fa fa-gas-pump text-white"></i>
-                            </div>
-                            <h5 class="fw-bold mb-0">Service Stations</h5>
-                        </div>
-                        <ul class="list-unstyled mb-4 small text-muted">
-                            <li class="mb-2"><i class="fa fa-check text-success me-2"></i>Full Service Fueling</li>
-                            <li class="mb-2"><i class="fa fa-check text-success me-2"></i>Quick Lube & Car Wash</li>
-                            <li class="mb-2"><i class="fa fa-check text-success me-2"></i>Convenience Stores</li>
-                        </ul>
-                        <a href="listings.php?category=service-stations"
-                            class="btn btn-outline-dark w-100 btn-sm">Explore Stations</a>
-                    </div>
-                </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -668,37 +691,6 @@
         </div>
     </div>
     <!-- CTA Section End -->
-
-    <!-- Advert Section Start -->
-    <div class="container-fluid py-4" style="background-color: #f8f9fa;">
-        <div class="container">
-            <div class="row g-4">
-                <div class="col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="0.1s">
-                    <div class="ad-slot bg-white">
-                        <a href="listings.php?category=spare-parts">
-                            <img class="img-fluid w-100" src="img/promo_parts.png" alt="Spare Parts Deal">
-                        </a>
-                    </div>
-                </div>
-                <div class="col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="0.3s">
-                    <div class="ad-slot bg-white">
-                        <a href="service.php">
-                            <img class="img-fluid w-100" src="img/promo_service.png" alt="Mechanic Service deal">
-                        </a>
-                    </div>
-                </div>
-                <div class="col-lg-4 col-md-12 wow fadeInUp" data-wow-delay="0.5s">
-                    <div class="ad-slot bg-white">
-                        <a href="business.php">
-                            <img class="img-fluid w-100" src="img/promo_dealer.png" alt="Verified Dealers deal">
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Advert Section End -->
-
 
     <!-- Team Start -->
     <!-- <div class="container-xxl py-5">
@@ -778,6 +770,71 @@
     <!-- Team End -->
 
 
+    <!-- Carousel Start -->
+    <div class="container-fluid p-0 mb-5">
+        <div id="header-carousel" class="carousel slide" data-bs-ride="carousel">
+            <div class="carousel-inner">
+                <?php if ($carousel_ads_result && $carousel_ads_result->num_rows > 0): ?>
+                    <?php
+                    $active = true;
+                    while ($ad = $carousel_ads_result->fetch_assoc()):
+                        ?>
+                        <div class="carousel-item <?php echo $active ? 'active' : ''; ?>">
+                            <img class="w-100" src="<?php echo htmlspecialchars($ad['image']); ?>" alt="Image">
+                            <div class="carousel-caption d-flex align-items-center">
+                                <div class="container">
+                                    <div class="row justify-content-start">
+                                        <div class="col-10 col-lg-8">
+                                            <h5 class="text-white text-uppercase mb-3 animated slideInDown">
+                                                A.R.T.S.P Special</h5>
+                                            <h1 class="display-3 text-white animated slideInDown mb-4">
+                                                <?php echo htmlspecialchars($ad['title'] ?? ''); ?>
+                                            </h1>
+                                            <p class="fs-5 fw-medium text-white mb-4 pb-2">
+                                                <?php echo htmlspecialchars($ad['description'] ?? ''); ?>
+                                            </p>
+                                            <a href="<?php echo htmlspecialchars($ad['link_url'] ?? 'listings.php'); ?>"
+                                                class="btn btn-primary py-3 px-5 animated slideInLeft">Discover
+                                                More<i class="fa fa-arrow-right ms-3"></i></a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <?php
+                        $active = false;
+                    endwhile;
+                    ?>
+                <?php else: ?>
+                    <div class="carousel-item active">
+                        <img class="w-100" src="img/carousel-bg-1.jpg" alt="Image">
+                        <div class="carousel-caption d-flex align-items-center">
+                            <div class="container">
+                                <div class="row justify-content-start">
+                                    <div class="col-10 col-lg-8">
+                                        <h1 class="display-3 text-white animated slideInDown mb-4">Welcome
+                                            to Auto Abuja</h1>
+                                        <a href="listings.php"
+                                            class="btn btn-primary py-3 px-5 animated slideInLeft">Discover
+                                            More<i class="fa fa-arrow-right ms-3"></i></a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            </div>
+            <button class="carousel-control-prev" type="button" data-bs-target="#header-carousel" data-bs-slide="prev">
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Previous</span>
+            </button>
+            <button class="carousel-control-next" type="button" data-bs-target="#header-carousel" data-bs-slide="next">
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Next</span>
+            </button>
+        </div>
+    </div>
+    <!-- Carousel End -->
     <!-- How It Works Start -->
     <div class="container-xxl py-5">
         <div class="container">
@@ -841,40 +898,23 @@
                 <h1 class="mb-5">Trusted By Leading Organizations</h1>
             </div>
             <div class="row g-4 align-items-center">
-                <div class="col-lg-2 col-md-4 col-6 wow fadeInUp" data-wow-delay="0.1s">
-                    <div class="partner-item bg-light p-4 text-center">
-                        <img src="img/npf.jpg" alt="Nigeria Police Force" class="img-fluid" style="max-height: 80px;">
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-4 col-6 wow fadeInUp" data-wow-delay="0.2s">
-                    <div class="partner-item bg-light p-4 text-center">
-                        <img src="img/son.webp" alt="Standards Organisation of Nigeria (SON)" class="img-fluid"
-                            style="max-height: 80px;">
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-4 col-6 wow fadeInUp" data-wow-delay="0.3s">
-                    <div class="partner-item bg-light p-4 text-center">
-                        <img src="img/customs.jpg" alt="Nigeria Customs Service" class="img-fluid"
-                            style="max-height: 80px;">
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-4 col-6 wow fadeInUp" data-wow-delay="0.4s">
-                    <div class="partner-item bg-light p-4 text-center">
-                        <img src="img/amdon.png" alt="Amdon" class="img-fluid" style="max-height: 80px;">
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-4 col-6 wow fadeInUp" data-wow-delay="0.5s">
-                    <div class="partner-item bg-light p-4 text-center">
-                        <img src="img/naddc.jpeg" alt="National Automotive Design and Development Council (NADDC)"
-                            class="img-fluid" style="max-height: 80px;">
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-4 col-6 wow fadeInUp" data-wow-delay="0.6s">
-                    <div class="partner-item bg-light p-4 text-center">
-                        <img src="img/frsc.png" alt="Federal Road Safety Corps (FRSC)" class="img-fluid"
-                            style="max-height: 80px;">
-                    </div>
-                </div>
+                <?php if ($partners_result && $partners_result->num_rows > 0): ?>
+                    <?php
+                    $delay = 0.1;
+                    while ($partner = $partners_result->fetch_assoc()):
+                        ?>
+                        <div class="col-lg-2 col-md-4 col-6 wow fadeInUp" data-wow-delay="<?php echo $delay; ?>s">
+                            <div class="partner-item bg-light p-4 text-center">
+                                <img src="<?php echo htmlspecialchars($partner['logo']); ?>"
+                                    alt="<?php echo htmlspecialchars($partner['name']); ?>" class="img-fluid"
+                                    style="max-height: 80px;">
+                            </div>
+                        </div>
+                        <?php
+                        $delay += 0.1;
+                    endwhile;
+                    ?>
+                <?php endif; ?>
             </div>
             <div class="text-center mt-5">
                 <a class="btn btn-primary py-3 px-5" href="contact.php">Contact Us</a>
@@ -882,6 +922,68 @@
         </div>
     </div>
     <!-- Partners End -->
+
+    <!-- Testimonials Start -->
+    <div class="container-xxl py-5">
+        <div class="container">
+            <div class="text-center wow fadeInUp" data-wow-delay="0.1s">
+                <h6 class="text-primary text-uppercase"> Testimonials </h6>
+                <h1 class="mb-5">What Our Clients Say</h1>
+            </div>
+            <div class="row g-4">
+                <?php if ($testimonials_result && $testimonials_result->num_rows > 0): ?>
+                    <?php while ($t = $testimonials_result->fetch_assoc()): ?>
+                        <div class="col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="0.1s">
+                            <div class="testimonial-item bg-light p-4 rounded h-100">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="ps-3">
+                                        <h5 class="fw-bold mb-1">
+                                            <?php echo htmlspecialchars($t['name']); ?>
+                                        </h5>
+                                        <small class="text-muted">
+                                            <?php echo htmlspecialchars($t['position']); ?>
+                                        </small>
+                                    </div>
+                                </div>
+                                <p class="mb-0 italic">"
+                                    <?php echo htmlspecialchars($t['text']); ?>"
+                                </p>
+                            </div>
+                        </div>
+                    <?php endwhile; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    <!-- Testimonials End -->
+
+
+    <!-- Advert Section Start -->
+    <div class="container-fluid py-4" style="background-color: #f8f9fa;">
+        <div class="container">
+            <div class="row g-4">
+                <?php if ($promo_ads_result && $promo_ads_result->num_rows > 0): ?>
+                    <?php
+                    $delay = 0.1;
+                    while ($ad = $promo_ads_result->fetch_assoc()):
+                        ?>
+                        <div class="col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="<?php echo $delay; ?>s">
+                            <div class="ad-slot bg-white">
+                                <a href="<?php echo htmlspecialchars($ad['link_url'] ?? '#'); ?>">
+                                    <img class="img-fluid w-100" src="<?php echo htmlspecialchars($ad['image']); ?>"
+                                        alt="<?php echo htmlspecialchars($ad['title']); ?>">
+                                </a>
+                            </div>
+                        </div>
+                        <?php
+                        $delay += 0.2;
+                    endwhile;
+                    ?>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    <!-- Advert Section End -->
 
 
     <?php include 'includes/footer.php'; ?>

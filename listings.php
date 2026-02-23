@@ -13,11 +13,11 @@ $where_clauses = ["b.status = 'approved'"];
 $joins = "";
 
 if ($category_slug) {
-    $joins .= " INNER JOIN categories c ON b.category_id = c.id AND c.slug = '$category_slug'";
+    $where_clauses[] = "c.slug = '$category_slug'";
 }
 
 if ($subcategory_slug) {
-    $joins .= " INNER JOIN subcategories sc ON b.subcategory_id = sc.id AND sc.slug = '$subcategory_slug'";
+    $where_clauses[] = "sc.slug = '$subcategory_slug'";
 }
 
 if ($search) {
@@ -27,7 +27,10 @@ if ($search) {
 $where_sql = implode(' AND ', $where_clauses);
 
 // Get total count
-$count_query = "SELECT COUNT(*) as total FROM businesses b $joins WHERE $where_sql";
+$count_query = "SELECT COUNT(*) as total FROM businesses b 
+                LEFT JOIN categories c ON b.category_id = c.id
+                LEFT JOIN subcategories sc ON b.subcategory_id = sc.id
+                WHERE $where_sql";
 $count_result = $conn->query($count_query);
 $total_businesses = $count_result->fetch_assoc()['total'];
 $total_pages = ceil($total_businesses / ITEMS_PER_PAGE);
@@ -40,7 +43,6 @@ $query = "SELECT b.*, c.name as category_name, c.slug as category_slug,
           LEFT JOIN categories c ON b.category_id = c.id
           LEFT JOIN subcategories sc ON b.subcategory_id = sc.id
           LEFT JOIN users u ON b.user_id = u.id
-          $joins
           WHERE $where_sql
           ORDER BY b.is_featured DESC, b.created_at DESC
           LIMIT " . ITEMS_PER_PAGE . " OFFSET $offset";
@@ -251,7 +253,7 @@ if ($subcategory_slug) {
                             <div class="card listing-card">
                                 <div class="position-relative">
                                     <img src="<?php echo $business['cover_image'] ?: 'img/default-business.jpg'; ?>" 
-                                         class="card-img-top listing-image" alt="<?php echo htmlspecialchars($business['business_name']); ?>">
+                                         class="card-img-top listing-image" alt="<?php echo htmlspecialchars($business['business_name'] ?? ''); ?>">
                                     <?php if ($business['is_featured']): ?>
                                         <span class="badge-featured">
                                             <i class="fa fa-star"></i> Featured
@@ -263,7 +265,7 @@ if ($subcategory_slug) {
                                         <h5 class="card-title mb-0">
                                             <a href="business-detail.php?slug=<?php echo $business['slug']; ?>" 
                                                class="text-decoration-none text-dark">
-                                                <?php echo htmlspecialchars($business['business_name']); ?>
+                                                <?php echo htmlspecialchars($business['business_name'] ?? ''); ?>
                                             </a>
                                         </h5>
                                         <?php if ($business['verified']): ?>
@@ -280,17 +282,17 @@ if ($subcategory_slug) {
                                     <?php endif; ?>
 
                                     <p class="card-text text-muted small mb-2">
-                                        <?php echo substr(htmlspecialchars($business['description']), 0, 100); ?>...
+                                        <?php echo substr(htmlspecialchars($business['description'] ?? ''), 0, 100); ?>...
                                     </p>
 
                                     <div class="business-contact mb-2">
                                         <div class="mb-1">
                                             <i class="fa fa-map-marker-alt text-primary"></i>
-                                            <small><?php echo htmlspecialchars($business['address']); ?></small>
+                                            <small><?php echo htmlspecialchars($business['address'] ?? ''); ?></small>
                                         </div>
                                         <div class="mb-1">
                                             <i class="fa fa-phone text-primary"></i>
-                                            <small><?php echo htmlspecialchars($business['phone']); ?></small>
+                                            <small><?php echo htmlspecialchars($business['phone'] ?? ''); ?></small>
                                         </div>
                                     </div>
 
